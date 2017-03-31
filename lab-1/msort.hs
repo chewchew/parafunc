@@ -6,9 +6,7 @@ import System.Environment (getArgs)
 import System.Random (StdGen, getStdGen, randomRs)
 
 import Control.Parallel -- par and pseq (should be in base)
-import Criterion.Main
-
---import Control.Monad.Par -- Par monad (monad-par on hackage)
+import Control.Parallel.Strategies
 
 force :: [a] -> ()
 force [] = ()
@@ -20,8 +18,11 @@ randomInts k range g = let result = take k (randomRs range g)
 
 
 split :: [Int] -> ([Int],[Int])
-split xs = splitAt ((length xs + 1) `div` 2) xs
+split xs = (take n xs, drop n xs)
+	where n = (length xs + 1) `div` 2
 
+-- mSort
+-- Regular merge sort
 merge :: [Int] -> [Int] -> [Int]
 merge [] []     = []
 merge xs []     = xs
@@ -41,34 +42,58 @@ mSort xs 	  =
 	in 
 		merge (mSort xs1) (mSort xs2)
 
-pSort :: Int -> [Int] -> [Int]
-pSort d []      = []
-pSort d (x:[])  = [x]
-pSort d (x:[y]) = if x < y then [x,y] else [y,x]
-pSort 0 xs      = mSort xs
-pSort d xs 	    = 
+-- pSort1
+-- Parallelized with par and pseq
+pSort1 :: Int -> [Int] -> [Int]
+pSort1 d []    = []
+pSort1 d [x]   = [x]
+pSort1 d [x,y] = if x < y then [x,y] else [y,x]
+pSort1 0 xs    = sort xs
+pSort1 d xs    = 
 	let 
 		(xs1,xs2) = split xs
-		s1 = pSort (d-1) xs1
-		s2 = pSort (d-1) xs2
+		s1 = pSort1 (d-1) xs1
+		s2 = pSort1 (d-1) xs2
 	in
-		s1 `par` (s2 `pseq` (merge s1 s2))
+		(force s1) `par` (force s2) `pseq` (merge s1 s2)
+
+-- pSort2
+-- Parallelized with parTuple2 Strategy
+pMerge :: ([Int],[Int]) -> [Int]
+pMerge ([],[]) = []
+pMerge (xs,[]) = xs
+pMerge ([],ys) = ys
+pMerge ((x:xs),(y:ys)) =
+	if x < y
+		then x : (pMerge (xs, (y:ys)))
+		else y : (pMerge ((x:xs), ys))
+
+pSort2 :: Int -> [Int] -> [Int]
+pSort2 _ []    = []
+pSort2 _ [x]   = [x]
+pSort2 _ [x,y] = if x < y then [x,y] else [y,x]
+pSort2 0 xs = sort xs
+pSort2 d xs = 
+	let
+		(xs1,xs2) = split xs
+		s1 = pSort2 (d-1) xs1
+		s2 = pSort2 (d-1) xs2
+	in
+		pMerge ((s1,s2) `using` parTuple2 rdeepseq rdeepseq)
+
+cmp :: [Int] -> [Int] -> Bool
+cmp [] [] = True
+cmp xs [] = False
+cmp [] ys = False
+cmp (x:xs) (y:ys) = x == y && cmp xs ys
 
 main = do
-	let d = 10
+	let n = 1000000
+	let d = 3
+	input <- randomInts n (1,10000) `fmap` getStdGen
 
-	--input <- randomInts 10000000 (1,1000000) `fmap` getStdGen
-	--start <- getCurrentTime
-	--seq (mSort input) (return ())
-	--end   <- getCurrentTime
-	--putStrLn $ "mSort: " ++ show (end `diffUTCTime` start)
-
-	input <- randomInts 10000 (1,10000) `fmap` getStdGen
-	--start <- getCurrentTime
-	--seq (pSort d input) (return ())
-	--end   <- getCurrentTime
-	--putStrLn $ "pSort: " ++ show (end `diffUTCTime` start)
-
-	-- print $ sort input == mSort input && mSort input == pSort d input
-
-	defaultMain [ bench "msort" $ nf (pSort d) input ]
+	-- Run one of the sorting algorithms: --
+	--print $ cmp (pSort1 d input) (sort input)
+	--print $ cmp (pSort2 d input) (sort input)
+	--print $ cmp (mSort input)    (sort input)
+	
