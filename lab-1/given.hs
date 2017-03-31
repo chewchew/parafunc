@@ -2,6 +2,8 @@ import Data.List
 import System.Random
 import Criterion.Main
 import Control.Parallel
+import Control.Parallel.Strategies
+import Control.DeepSeq
 
 -- code borrowed from the Stanford Course 240h (Functional Systems in Haskell)
 -- I suspect it comes from Bryan O'Sullivan, author of Criterion
@@ -31,15 +33,44 @@ parMap1 f (l:ls) = let xs = parMap1 f ls
                    in par x (pseq xs (x:xs))
 
 -- Parallel map like above but only parallelize to a certain depth
--- This is currently crap performance but trying to figure out why
+-- Don't know why this doesn't create parallelism
 parMap2 :: Int -> (a -> b) -> [a] -> [b]
-parMap2 _ _ []     = []
-parMap2 d f ls = let xs = parMap2 d f $ drop d ls
-                     x  = map f $ take d ls
-                 in par x (pseq xs (x ++ xs))
+parMap2 _ _ [] = []
+parMap2 0 f ls = map f ls
+parMap2 d f ls =  
+  let splits   = splitAt (((length ls) + 1) `div` 2) ls
+      r        = fst splits
+      l        = snd splits
+      pR       = parMap2 (d-1) f r
+      pL       = parMap2 (d-1) f l
+  in  par pR (pL ++ pR)
 
-jackknife :: ([a] -> b) -> [a] -> [b]
-jackknife f = parMap2 10 f . resamples 500
+-- Parallel map with Eval monad and rpar/rseq/rseq pattern
+parMap3 :: (a -> b) -> [a] -> [b]
+parMap3 _ [] = []
+parMap3 f (l:ls) = runEval $ do
+  a <- rpar (f l)
+  b <- rseq (parMap3 f ls)
+  rseq a
+  return (a:b)
+
+-- Parallel map with Eval monad and rpar/rseq/rseq pattern and
+-- adjusted for more granularity control
+parMap4 :: (NFData a, NFData b) => Int -> (a -> b) -> [a] -> [b]
+parMap4 _ _ [] = []
+parMap4 0 f ls = map f ls
+parMap4 d f ls = runEval $ do
+  let (l,r) = splitAt (((length ls) + 1) `div` 2) ls
+  a <- rpar (force (parMap4 (d-1) f l))
+  b <- rseq (force (parMap4 (d-1) f r))
+  rseq a
+  return (a ++ b)
+
+parMap5 :: (NFData a, NFData b) => Int -> (a -> b) -> [a] -> [b]
+
+
+jackknife :: (NFData a, NFData b) => ([a] -> b) -> [a] -> [b]
+jackknife f = parMap4 4 f . resamples 500
 
 
 crud = zipWith (\x a -> sin (x / 300)**2 + a) [0..]
