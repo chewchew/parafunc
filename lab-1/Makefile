@@ -8,7 +8,7 @@ all:
 #Also setting GC's allocation area to very large (100mb) 
 #to avoid garbage collection
 run: 
-	./given +RTS -N2 -lf -A100m
+	./given +RTS -N4 -lfs -A100M
 
 clean:
 	rm given.eventlog
