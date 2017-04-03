@@ -5,17 +5,16 @@ import System.Random (StdGen, getStdGen, randomRs)
 
 import Control.Parallel -- par and pseq (should be in base)
 import Control.Parallel.Strategies
-
+import Control.DeepSeq
 import Criterion.Main
 
-force :: [a] -> ()
-force [] = ()
-force (x:xs) = x `pseq` force xs
+--force :: [a] -> ()
+--force [] = ()
+--force (x:xs) = x `pseq` force xs
 
 randomInts :: Int -> (Int,Int) -> StdGen -> [Int]
 randomInts k range g = let result = take k (randomRs range g)
                   in force result `pseq` result
-
 
 split :: [Int] -> ([Int],[Int])
 split xs = (take n xs, drop n xs)

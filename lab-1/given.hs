@@ -26,11 +26,11 @@ resamples k xs =
     zipWith (++) (inits xs) (map (drop k) (tails xs))
 
 -- Parallel map which parallelize every f x
-parMap1 :: (a -> b) -> [a] -> [b]
+parMap1 :: (NFData a , NFData b) => (a -> b) -> [a] -> [b]
 parMap1 _ []     = []
 parMap1 f (l:ls) = let xs = parMap1 f ls
                        x  = f l
-                   in par x (pseq xs (x:xs))
+                   in par (force x) (pseq (force xs) (x:xs))
 
 -- Parallel map like above but only parallelize to a certain depth
 parMap2 :: (NFData a, NFData b) => Int -> (a -> b) -> [a] -> [b]
@@ -65,22 +65,10 @@ parMap4 d f ls = runEval $ do
   rseq a
   return (a ++ b)
 
--- Using the Eval monad and running 
--- chunks of list as work in parallel
-parMap5 :: (NFData a, NFData b) => Int -> (a -> b) -> [a] -> [b]
-parMap5 _ _ [] = []
-parMap5 d f ls = runEval $ do
-  let left = drop d ls 
-  a <- rpar (force (map f (take d ls)))
-  l <- rseq (force left)
-  b <- rseq (force (parMap4 d f l))
-  rseq a
-  return (a ++ b)
-
 -- Using Strategies to separate algorithm from 
 -- how we run it in parallel
-parMap6 :: (NFData a, NFData b) => (a -> b) -> [a] -> [b]
-parMap6 f ls = map f ls `using` parList rseq 
+parMap5:: (NFData a, NFData b) => (a -> b) -> [a] -> [b]
+parMap5 f ls = map f ls `using` parList rdeepseq 
 
 -- Spawn a new node
 mySpawn :: NFData a => Par a -> Par (IVar a)
@@ -98,8 +86,8 @@ mParMap f ls = do
   mapM get is
 
 -- Parallelizing map using Par Monad
-parMap7 :: (NFData a, NFData b) => (a -> b) -> [a] -> [b]
-parMap7 f ls = runPar $ mParMap (return . f) ls
+parMap6 :: (NFData a, NFData b) => (a -> b) -> [a] -> [b]
+parMap6 f ls = runPar $ mParMap (return . f) ls
 
 -- Redefined to be able to remove dependency of map
 jackknife :: (NFData a, NFData b) => ([[a]] -> [b]) -> [a] -> [b]
@@ -123,25 +111,24 @@ benchmarkIt = do
          [ 
          bench "jackknife sequential" (nf (jackknife (map mean)) rs),
          bench "jackknife par and pseq" (nf (jackknife (parMap1 mean)) rs),
-         (bench "jackknife par and pseq with depth 10 (splitting list)" 
+         (bench "jackknife par and pseq with depth 30 (splitting list)" 
             (nf (jackknife (parMap2 30 mean)) rs)),
          (bench "jackknife Standard parMap from parallel" 
             (nf (jackknife (Control.Parallel.Strategies.parMap rpar mean)) rs)),
          (bench "jackknife Eval monad with rpar/rseq/rseq" 
             (nf (jackknife (parMap3 mean)) rs)),
-         (bench "jackknife rpar/rseq/rseq with depth" 
-            (nf (jackknife (parMap4 10 mean)) rs)),
-         (bench "jackknife rpar/rseq/rseq fixed chunks of work" 
-          (nf (jackknife (parMap5 30 mean)) rs)),
-         bench "jackknife with Strategies" (nf (jackknife (parMap6 mean)) rs),
-         bench "jackknife with Par Monad" (nf (jackknife (parMap7 mean)) rs) 
+         (bench "jackknife rpar/rseq/rseq with depth 30 (spliting list)" 
+            (nf (jackknife (parMap4 30 mean)) rs)),
+         bench "jackknife with Strategies" (nf (jackknife (parMap5 mean)) rs),
+         bench "jackknife with Par Monad" (nf (jackknife (parMap6 mean)) rs) 
          ]
 
+-- Function for running just one of the parMap's
 run :: IO ()
 run = do
   putStrLn "Running just one jackknife"
-  let ls = jackknifePar7  mean (take 10000 (randoms (mkStdGen 211570155))::[Float])
-  putStrLn $ "Result: " ++ (show ls)
-  return ()
+  let ls = (jackknife (parMap4 10 mean) 
+      (take 6000 (randoms (mkStdGen 211570155))::[Float]))
+  putStrLn $ "Result: " ++ seq (force ls) (show (length ls))
 
 main = benchmarkIt
