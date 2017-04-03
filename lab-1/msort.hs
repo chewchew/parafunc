@@ -1,8 +1,6 @@
 module Main where
 
 import Data.List
-import Data.Time.Clock (diffUTCTime, getCurrentTime)
-import System.Environment (getArgs)
 import System.Random (StdGen, getStdGen, randomRs)
 
 import Control.Parallel -- par and pseq (should be in base)
@@ -83,23 +81,17 @@ pSort2 d xs =
     in
         pMerge ((s1,s2) `using` parTuple2 rdeepseq rdeepseq)
 
-cmp :: [Int] -> [Int] -> Bool
-cmp [] [] = True
-cmp xs [] = False
-cmp [] ys = False
-cmp (x:xs) (y:ys) = x == y && cmp xs ys
-
+-- Run a benchmark on the sorting algorithms --
 benchmark :: IO()
 benchmark = do
     let n = 100000
-    let d1 = 4
-    let d2 = 4
+    let d1 = 3
+    let d2 = 2
     input1 <- randomInts n (1,10000) `fmap` getStdGen
     input2 <- randomInts n (1,10000) `fmap` getStdGen
     input3 <- randomInts n (1,10000) `fmap` getStdGen
 
-    -- Run the sorting algorithms --
-    let l1 = "pSort1 (seq,pseq) (d = " ++ show d1 ++ ")"
+    let l1 = "pSort1 (par,pseq) (d = " ++ show d1 ++ ")"
     let l2 = "pSort2 (Strategies,parTuple2,rdeepseq) (d = " ++ show d2 ++ ")"
     defaultMain 
         [
@@ -110,6 +102,3 @@ benchmark = do
 
 main :: IO()
 main = benchmark
-    -- let n = 10000
-    -- input <- randomInts n (1,10000) `fmap` getStdGen
-    -- print $ (pSort1 4 input) == (sort input)
