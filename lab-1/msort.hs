@@ -81,16 +81,18 @@ pSort2 d xs =
         pMerge ((s1,s2) `using` parTuple2 rdeepseq rdeepseq)
 
 mergesort2 :: [Int] -> [Int] 
-mergesort2 xs = runEval $ go xs
+mergesort2 xs = runEval $ go 1 xs
   where
-    go [] = return []
-    go [x] = return [x]
-    go [x,y] = if x < y then return [x,y] else return [y,x]
-    go xs = do
+    go d [] = return []
+    go d [x] = return [x]
+    go d [x,y] = if x < y then return [x,y] else return [y,x]
+    go 0 xs = return $ mSort xs
+    go d xs = do
       let (xs1,xs2) = split xs
-      s1 <- go xs1
-      s2 <- go xs2
-      parList rdeepseq (pMerge (s1,s2))  
+      s1 <- go (d-1) xs1
+      s2 <- go (d-1) xs2
+      s <- parTuple2 rdeepseq rdeepseq (s1,s2)
+      parList rdeepseq (pMerge s)
 
 -- Run a benchmark on the sorting algorithms --
 benchmark :: IO()
@@ -101,14 +103,17 @@ benchmark = do
     input1 <- randomInts n (1,10000) `fmap` getStdGen
     input2 <- randomInts n (1,10000) `fmap` getStdGen
     input3 <- randomInts n (1,10000) `fmap` getStdGen
+    input4 <- randomInts n (1,10000) `fmap` getStdGen
 
     let l1 = "pSort1 (par,pseq) (d = " ++ show d1 ++ ")"
     let l2 = "pSort2 (Strategies,parTuple2,rdeepseq) (d = " ++ show d2 ++ ")"
+    let l3 = "mergesort2"
     defaultMain 
         [
-            bench l1 (nf (pSort1 d1) input1),
-            bench l2 (nf (pSort2 d2) input2),
-            bench "mSort (regular)" (nf mSort input3)
+            --bench l1 (nf (pSort1 d1) input1),
+            --bench l2 (nf (pSort2 d2) input2),
+            bench l3 (nf mergesort2 input4)
+            --bench "mSort (regular)" (nf mSort input3)
         ]
 
 main :: IO()

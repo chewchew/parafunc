@@ -10,8 +10,8 @@ all:
 #Also setting GC's allocation area to very large (100mb) 
 #to avoid garbage collection
 run: 
-	./given +RTS -N4 -lfs -A1000M
-	# ./msort +RTS -N4 -lfs -A500M
+	# ./given +RTS -N4 -lfs -A1000M
+	./msort +RTS -N4 -lfs -A500M
 
 clean:
 	rm -f given

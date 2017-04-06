@@ -127,8 +127,7 @@ benchmarkIt = do
 run :: IO ()
 run = do
   putStrLn "Running just one jackknife"
-  let ls = (jackknife (parMap4 10 mean) 
-      (take 6000 (randoms (mkStdGen 211570155))::[Float]))
+  let ls = (jackknife (parMap4 10 mean) (take 6000 (randoms (mkStdGen 211570155))::[Float]))
   putStrLn $ "Result: " ++ seq (force ls) (show (length ls))
 
 main = benchmarkIt
