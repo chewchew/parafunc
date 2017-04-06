@@ -80,6 +80,18 @@ pSort2 d xs =
     in
         pMerge ((s1,s2) `using` parTuple2 rdeepseq rdeepseq)
 
+mergesort2 :: [Int] -> [Int] 
+mergesort2 xs = runEval $ go xs
+  where
+    go [] = return []
+    go [x] = return [x]
+    go [x,y] = if x < y then return [x,y] else return [y,x]
+    go xs = do
+      let (xs1,xs2) = split xs
+      s1 <- go xs1
+      s2 <- go xs2
+      parList rdeepseq (pMerge (s1,s2))  
+
 -- Run a benchmark on the sorting algorithms --
 benchmark :: IO()
 benchmark = do
