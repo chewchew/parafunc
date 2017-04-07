@@ -5,6 +5,7 @@ import System.Random (StdGen, getStdGen, randomRs)
 
 import Control.Parallel -- par and pseq (should be in base)
 import Control.Parallel.Strategies
+import Control.Monad.Par
 import Control.DeepSeq
 import Criterion.Main
 
@@ -80,8 +81,10 @@ pSort2 d xs =
     in
         pMerge ((s1,s2) `using` parTuple2 rdeepseq rdeepseq)
 
-mergesort2 :: [Int] -> [Int] 
-mergesort2 xs = runEval $ go 1 xs
+-- mergesort
+-- uses Par monad with recursive helper
+mergesort :: Int -> [Int] -> [Int] 
+mergesort granularity xs = runPar $ go granularity xs
   where
     go d [] = return []
     go d [x] = return [x]
@@ -89,10 +92,9 @@ mergesort2 xs = runEval $ go 1 xs
     go 0 xs = return $ mSort xs
     go d xs = do
       let (xs1,xs2) = split xs
-      s1 <- go (d-1) xs1
-      s2 <- go (d-1) xs2
-      s <- parTuple2 rdeepseq rdeepseq (s1,s2)
-      parList rdeepseq (pMerge s)
+      s1 <- spawn $ go (d-1) xs1
+      s2 <- spawn $ go (d-1) xs2
+      (fmap merge $ get s1) <*> get s2
 
 -- Run a benchmark on the sorting algorithms --
 benchmark :: IO()
@@ -100,6 +102,7 @@ benchmark = do
     let n = 100000
     let d1 = 3
     let d2 = 2
+    let d3 = 9
     input1 <- randomInts n (1,10000) `fmap` getStdGen
     input2 <- randomInts n (1,10000) `fmap` getStdGen
     input3 <- randomInts n (1,10000) `fmap` getStdGen
@@ -107,14 +110,15 @@ benchmark = do
 
     let l1 = "pSort1 (par,pseq) (d = " ++ show d1 ++ ")"
     let l2 = "pSort2 (Strategies,parTuple2,rdeepseq) (d = " ++ show d2 ++ ")"
-    let l3 = "mergesort2"
+    let l3 = "mergesort (Par monad) (d = " ++ show d3 ++ ")"
     defaultMain 
         [
-            --bench l1 (nf (pSort1 d1) input1),
-            --bench l2 (nf (pSort2 d2) input2),
-            bench l3 (nf mergesort2 input4)
-            --bench "mSort (regular)" (nf mSort input3)
+            bench l1 (nf (pSort1 d1) input1),
+            bench l2 (nf (pSort2 d2) input2),
+            bench l3 (nf (mergesort d3) input4),
+            bench "mSort (regular)" (nf mSort input3)
         ]
+    print $ (mergesort d3 input4) == (sort input4)
 
 main :: IO()
 main = benchmark
