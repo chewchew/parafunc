@@ -8,7 +8,7 @@
 %%     vector(M,vector(N,nat())).
 
 %% matrix transpose
-
+% low prio parallel
 transpose([Row]) ->
     [[X] || X <- Row];
 transpose([Row|M]) ->
@@ -21,12 +21,13 @@ transpose([Row|M]) ->
 
 %% map a matrix to a list of 3x3 blocks, each represented by the list
 %% of elements in row order
-
+% low prio parallel
 triples([A,B,C|D]) ->
     [[A,B,C]|triples(D)];
 triples([]) ->
     [].
 
+% low prio paralell
 blocks(M) ->
     Blocks = [triples(X) || X <- transpose([triples(Row) || Row <- M])],
     lists:append(
@@ -35,6 +36,7 @@ blocks(M) ->
 		end,
 		Blocks)).
 
+% low prio paralell
 unblocks(M) ->
     lists:map(
       fun lists:append/1,
@@ -59,6 +61,7 @@ safe_entries(Row) ->
     Entries = entries(Row),
     lists:sort(Entries) == lists:usort(Entries).
 
+% med prio paralell
 safe_rows(M) ->
     lists:all(fun safe_entries/1,M).
 
@@ -88,9 +91,9 @@ refine(M) ->
 	  transpose(
 	    refine_rows(
 	      transpose(
-		unblocks(
-		  refine_rows(
-		    blocks(M))))))),
+			unblocks(
+			  refine_rows(
+			    blocks(M))))))),
     if M==NewM ->
 	    M;
        true ->
