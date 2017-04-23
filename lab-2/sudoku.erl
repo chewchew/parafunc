@@ -235,13 +235,16 @@ repeat(F) ->
     [F() || _ <- lists:seq(1,?EXECUTIONS)].
 
 benchmarks(Puzzles) ->
-  %Parent = self(),
-  %Pids = [spawn_link(fun() ->
-  %  Parent !
-  %    {self(), {Name,bm(fun()->solve(M) end)}}
-  %end) || M <- Puzzles],
-  %[ recieve {Pid,Pair} -> Pair end || Pid <- Pids]
-    [{Name,bm(fun()->solve(M) end)} || {Name,M} <- Puzzles].
+    % Parallel
+	% Self = self(),
+	% Pids = [ spawn_link(
+	% 	fun() -> 
+	% 		Self ! { self(), {Name,bm( fun()-> solve(M) end )} }
+	% 	end) || {Name,M} <- Puzzles ],
+	% [ receive {Pid,R} -> R end || Pid <- Pids ].
+
+	% Sequential
+    [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
   {ok,Puzzles} = file:consult("problems.txt"),
