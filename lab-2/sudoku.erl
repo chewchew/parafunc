@@ -100,8 +100,46 @@ refine(M) ->
 	    refine(NewM)
     end.
 
+parmap(_, []) -> [];
+parmap(F, [L|Ls]) ->
+	Parent = self(),
+	Pid = spawn_link(fun() -> Parent ! {self(), parmap(F,Ls)} end),
+	[ F(L) | 
+		receive 
+			{Pid,Result} -> Result
+		after 5000 ->
+			exit(timeout)
+		end].
+
+collect() ->
+	receive
+		[Parent,{Ref,Row}] ->
+			Parent ! {Ref,refine_row(Row)},
+			collect();
+		stop ->
+			true
+	end.
+
 refine_rows(M) ->
-    lists:map(fun refine_row/1,M).
+	% parmap(fun refine_row/1,M).
+	
+	% Parent = self(),
+	% MRefs = [{Ref,Row} || {Ref,Row} <- lists:zip(lists:seq(1,length(M)),M)],
+	
+	% Pids = [spawn_link(fun() -> Parent ! {self(), {Ref,refine_row(Row)}} end) || {Ref,Row} <- MRefs],
+	% Rows = [receive {Pid,Result} -> Result end || Pid <- Pids],
+	% SortedRows = lists:sort(fun({Ref1,_},{Ref2,_}) -> Ref1 < Ref2 end, Rows),
+	% lists:map(fun({_,Row}) -> Row end, SortedRows).
+
+	% register(collect, spawn(collect, collect, [])),
+	% lists:map(fun({Ref,Row}) -> collect ! {Parent,{Ref,Row}} end, MRefs),
+	% [receive {Ref,Row} -> Row end || {Ref,_} <- MRefs].
+	
+	% Seq = [list_to_atom("pid" ++ integer_to_list(X)) || X <- lists:seq(1,length(M))],
+	% [register(Ref, spawn(fun() -> refine_row(Row) end)) || {Ref,Row} <- lists:zip(Seq,M)],
+	% [receive {Ref,RefinedRow} -> RefinedRow end || Ref <- Seq].
+
+    % lists:map(fun refine_row/1,M).
 
 refine_row(Row) ->
     Entries = entries(Row),
@@ -125,7 +163,7 @@ refine_row(Row) ->
 	true ->
 	    NewRow;
 	false ->
-	    exit(no_solution)
+	    exit(NewEntries)
     end.
 
 is_exit({'EXIT',_}) ->
@@ -247,7 +285,8 @@ benchmarks(Puzzles) ->
     [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
-  {ok,Puzzles} = file:consult("problems.txt"),
+  % {ok,Puzzles} = file:consult("problems.txt"),
+  {ok,Puzzles} = file:consult("diablo.txt"),
   timer:tc(?MODULE,benchmarks,[Puzzles]).
 		      
 %% check solutions for validity
