@@ -100,46 +100,21 @@ refine(M) ->
 	    refine(NewM)
     end.
 
-parmap(_, []) -> [];
-parmap(F, [L|Ls]) ->
+%parmap(_, []) -> [];
+parmap(F, Ls) ->
 	Parent = self(),
-	Pid = spawn_link(fun() -> Parent ! {self(), parmap(F,Ls)} end),
-	[ F(L) | 
-		receive 
-			{Pid,Result} -> Result
-		after 5000 ->
-			exit(timeout)
-		end].
-
-collect() ->
-	receive
-		[Parent,{Ref,Row}] ->
-			Parent ! {Ref,refine_row(Row)},
-			collect();
-		stop ->
-			true
-	end.
+	Refs = lists:map(fun(X) -> spawn(fun() ->
+		case catch F(X) of
+			{'EXIT',_} -> Parent ! {self(),{'EXIT',no_solution}};
+			Res -> Parent ! {self(), Res}
+		end
+		end) end, Ls),
+	lists:map(fun(Ref) -> receive {Ref,Val} -> Val end end, Refs).
 
 refine_rows(M) ->
-	% parmap(fun refine_row/1,M).
-	
-	% Parent = self(),
-	% MRefs = [{Ref,Row} || {Ref,Row} <- lists:zip(lists:seq(1,length(M)),M)],
-	
-	% Pids = [spawn_link(fun() -> Parent ! {self(), {Ref,refine_row(Row)}} end) || {Ref,Row} <- MRefs],
-	% Rows = [receive {Pid,Result} -> Result end || Pid <- Pids],
-	% SortedRows = lists:sort(fun({Ref1,_},{Ref2,_}) -> Ref1 < Ref2 end, Rows),
-	% lists:map(fun({_,Row}) -> Row end, SortedRows).
+    % parmap(fun refine_row/1,M).
 
-	% register(collect, spawn(collect, collect, [])),
-	% lists:map(fun({Ref,Row}) -> collect ! {Parent,{Ref,Row}} end, MRefs),
-	% [receive {Ref,Row} -> Row end || {Ref,_} <- MRefs].
-	
-	% Seq = [list_to_atom("pid" ++ integer_to_list(X)) || X <- lists:seq(1,length(M))],
-	% [register(Ref, spawn(fun() -> refine_row(Row) end)) || {Ref,Row} <- lists:zip(Seq,M)],
-	% [receive {Ref,RefinedRow} -> RefinedRow end || Ref <- Seq].
-
-    % lists:map(fun refine_row/1,M).
+    lists:map(fun refine_row/1,M).
 
 refine_row(Row) ->
     Entries = entries(Row),
@@ -163,7 +138,7 @@ refine_row(Row) ->
 	true ->
 	    NewRow;
 	false ->
-	    exit(NewEntries)
+	    exit(no_solution)
     end.
 
 is_exit({'EXIT',_}) ->
@@ -233,13 +208,28 @@ update_nth(I,X,Xs) ->
 %% solve a puzzle
 
 solve(M) ->
-    Solution = solve_refined(refine(fill(M))),
+    % Solution = solve_refined(refine(fill(M))),
+    Solution = solve_parallel(6,refine(fill(M))),
     case valid_solution(Solution) of
 	true ->
 	    Solution;
 	false ->
 	    exit({invalid_solution,Solution})
     end.
+
+solve_parallel(0,M) -> solve_refined(M);
+solve_parallel(D,M) -> 
+	case solved(M) of
+		true  -> M;
+		false -> solve_rec(D,guesses(M))
+	end.
+
+solve_rec(_,[]) -> exit(no_solution);
+solve_rec(D,[M]) -> solve_parallel(D-1,M);
+solve_rec(D,Ms) -> 
+	Answers = parmap(fun(M) -> solve_parallel(D-1,M) end,Ms),
+	Solutions = lists:filter(fun(Answer) -> not is_exit(Answer) end, Answers),
+	hd(Solutions).
 
 solve_refined(M) ->
     case solved(M) of
@@ -251,6 +241,10 @@ solve_refined(M) ->
 
 solve_one([]) ->
     exit(no_solution);
+% solve_one(Ms) ->
+% 	As = lists:map(fun(M) -> catch solve_refined(M) end,Ms),
+% 	Ss = lists:filter(fun(M) -> not is_exit(M) end, As),
+% 	hd(Ss).
 solve_one([M]) ->
     solve_refined(M);
 solve_one([M|Ms]) ->
@@ -285,7 +279,6 @@ benchmarks(Puzzles) ->
     [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
-  % {ok,Puzzles} = file:consult("problems.txt"),
   {ok,Puzzles} = file:consult("diablo.txt"),
   timer:tc(?MODULE,benchmarks,[Puzzles]).
 		      
