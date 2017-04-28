@@ -105,25 +105,21 @@ newLog(Data) ->
   io:format("Value is : ~p",[Data]),
   io:nl().
 
-spawn_mapper(Fun, L)->
-  Parent = self(),
-  Pids = lists:map(fun(X) ->
-    spawn_link(fun() ->
-      execute(Parent,Fun,X)
-    end)
-  end,L),
-  gather(Pids).
-
-gather([]) -> [];
-gather([P|Ps]) ->
-  receive {P,Res} -> [Res|gather(Ps)] end.
-
-execute(Pid,Function,Element) ->
-  Pid ! {self(),Function(Element)}.
+%parmap(_, []) -> [];
+parmap(F, Ls) ->
+	Parent = self(),
+	Refs = lists:map(fun(X) -> spawn(fun() ->
+		case catch F(X) of
+			{'EXIT',_} -> Parent ! {self(),{'EXIT',no_solution}};
+			Res -> Parent ! {self(), Res}
+		end
+		end) end, Ls),
+	lists:map(fun(Ref) -> receive {Ref,Val} -> Val end end, Refs).
 
 refine_rows(M) ->
-%  lists:map(fun refine_row/1,M).
-  parallel:map(fun refine_row/1,M).
+    % parmap(fun refine_row/1,M).
+
+    lists:map(fun refine_row/1,M).
 
 refine_row(Row) ->
     Entries = entries(Row),
@@ -217,7 +213,8 @@ update_nth(I,X,Xs) ->
 %% solve a puzzle
 
 solve(M) ->
-    Solution = solve_refined(refine(fill(M))),
+    % Solution = solve_refined(refine(fill(M))),
+    Solution = solve_parallel(6,refine(fill(M))),
     case valid_solution(Solution) of
 	true ->
 	    Solution;
@@ -225,12 +222,20 @@ solve(M) ->
 	    exit({invalid_solution,Solution})
     end.
 
-%solve_parallel(0,M) -> solve_refined(M);
-%solve_parallel(D,M) ->
-  %case solved(M) of
-    
+solve_parallel(0,M) -> solve_refined(M);
+solve_parallel(D,M) -> 
+	case solved(M) of
+		true  -> M;
+		false -> solve_rec(D,guesses(M))
+	end.
 
-    
+solve_rec(_,[]) -> exit(no_solution);
+solve_rec(D,[M]) -> solve_parallel(D-1,M);
+solve_rec(D,Ms) -> 
+	Answers = parmap(fun(M) -> solve_parallel(D-1,M) end,Ms),
+	Solutions = lists:filter(fun(Answer) -> not is_exit(Answer) end, Answers),
+	hd(Solutions).
+
 solve_refined(M) ->
     case solved(M) of
 	true ->
@@ -241,6 +246,10 @@ solve_refined(M) ->
 
 solve_one([]) ->
     exit(no_solution);
+% solve_one(Ms) ->
+% 	As = lists:map(fun(M) -> catch solve_refined(M) end,Ms),
+% 	Ss = lists:filter(fun(M) -> not is_exit(M) end, As),
+% 	hd(Ss).
 solve_one([M]) ->
     solve_refined(M);
 solve_one([M|Ms]) ->
