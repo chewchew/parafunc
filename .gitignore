@@ -21,6 +21,7 @@ cabal.project.local
 lab-1/given
 lab-1/msort
 *.beam
+test.dat
 
 *.DS_Store
 .AppleDouble
