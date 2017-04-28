@@ -1,5 +1,6 @@
 -module(sudoku).
 %-include_lib("eqc/include/eqc.hrl").
+-import (workpool, [start_pool/1,speculate_on_worker/1,worker_value_of/1]).
 -compile(export_all).
 
 %% %% generators
@@ -207,29 +208,72 @@ update_nth(I,X,Xs) ->
 
 %% solve a puzzle
 
-solve(M) ->
-    % Solution = solve_refined(refine(fill(M))),
-    Solution = solve_parallel(6,refine(fill(M))),
-    case valid_solution(Solution) of
-	true ->
-	    Solution;
-	false ->
-	    exit({invalid_solution,Solution})
+solve(M) -> 
+    Solution = solve_refined(refine(fill(M))),
+	case valid_solution(Solution) of
+		true ->
+		    Solution;
+		false ->
+		    exit({invalid_solution,Solution})
     end.
 
-solve_parallel(0,M) -> solve_refined(M);
-solve_parallel(D,M) -> 
+solve_pmap(M) ->
+    Solution = solve_pmap_parallel(6,refine(fill(M))),
+	case valid_solution(Solution) of
+		true ->
+		    Solution;
+		false ->
+		    exit({invalid_solution,Solution})
+    end.
+
+solve_pmap_parallel(0,M) -> solve_refined(M);
+solve_pmap_parallel(D,M) -> 
 	case solved(M) of
 		true  -> M;
-		false -> solve_rec(D,guesses(M))
+		false -> solve_pmap_rec(D,guesses(M))
 	end.
 
-solve_rec(_,[]) -> exit(no_solution);
-solve_rec(D,[M]) -> solve_parallel(D-1,M);
-solve_rec(D,Ms) -> 
-	Answers = parmap(fun(M) -> solve_parallel(D-1,M) end,Ms),
+solve_pmap_rec(_,[]) -> exit(no_solution);
+solve_pmap_rec(D,[M]) -> solve_pmap_parallel(D-1,M);
+solve_pmap_rec(D,Ms) -> 
+	Answers = parmap(fun(M) -> solve_pmap_parallel(D-1,M) end,Ms),
 	Solutions = lists:filter(fun(Answer) -> not is_exit(Answer) end, Answers),
 	hd(Solutions).
+
+solve_pool(M) ->
+    start_pool(erlang:system_info(schedulers)-1),
+    Solution = solve_parallel(refine(fill(M))),
+    pool ! {stop,self()},
+    receive {pool,stopped} -> case valid_solution(Solution) of
+		true ->
+		    Solution;
+		false ->
+		    exit({invalid_solution,Solution})
+	    end
+	end.
+
+solve_parallel(M) -> 
+	case solved(M) of
+		true  -> M;
+		false -> solve_rec(guesses(M))
+	end.
+
+solve_rec([]) -> false;
+% solve_rec(Ms) when length(Ms) < 2 ->
+% 	case catch solve_one(Ms) of
+% 		{'EXIT',_} -> false;
+% 		Solution -> Solution
+% 	end;
+solve_rec([M|Ms]) -> 
+	Pid =
+		if
+		 	hard(M) > 20 -> speculate_on_worker(fun() -> solve_parallel(M) end);
+		 	true -> speculate_on_worker(fun() -> solve_refined(M) end)
+	 	end,
+	case solve_rec(Ms) of
+		false -> worker_value_of(Pid); % {'EXIT',no_solution}
+		Solution -> Solution
+	end.
 
 solve_refined(M) ->
     case solved(M) of
@@ -276,10 +320,10 @@ benchmarks(Puzzles) ->
 	% [ receive {Pid,R} -> R end || Pid <- Pids ].
 
 	% Sequential
-    [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
+    [ {Name, bm( fun()-> solve_pool(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
-  {ok,Puzzles} = file:consult("diablo.txt"),
+  {ok,Puzzles} = file:consult("problems.txt"),
   timer:tc(?MODULE,benchmarks,[Puzzles]).
 		      
 %% check solutions for validity
