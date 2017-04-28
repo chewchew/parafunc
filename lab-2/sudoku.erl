@@ -1,6 +1,7 @@
 -module(sudoku).
 %-include_lib("eqc/include/eqc.hrl").
 -compile(export_all).
+-import(parallel,[map/2]).
 
 %% %% generators
 
@@ -91,17 +92,38 @@ refine(M) ->
 	  transpose(
 	    refine_rows(
 	      transpose(
-			unblocks(
-			  refine_rows(
-			    blocks(M))))))),
+          unblocks(
+            refine_rows(
+              blocks(M))))))),
     if M==NewM ->
 	    M;
        true ->
 	    refine(NewM)
     end.
 
+newLog(Data) ->
+  io:format("Value is : ~p",[Data]),
+  io:nl().
+
+spawn_mapper(Fun, L)->
+  Parent = self(),
+  Pids = lists:map(fun(X) ->
+    spawn_link(fun() ->
+      execute(Parent,Fun,X)
+    end)
+  end,L),
+  gather(Pids).
+
+gather([]) -> [];
+gather([P|Ps]) ->
+  receive {P,Res} -> [Res|gather(Ps)] end.
+
+execute(Pid,Function,Element) ->
+  Pid ! {self(),Function(Element)}.
+
 refine_rows(M) ->
-    lists:map(fun refine_row/1,M).
+%  lists:map(fun refine_row/1,M).
+  parallel:map(fun refine_row/1,M).
 
 refine_row(Row) ->
     Entries = entries(Row),
@@ -203,6 +225,12 @@ solve(M) ->
 	    exit({invalid_solution,Solution})
     end.
 
+%solve_parallel(0,M) -> solve_refined(M);
+%solve_parallel(D,M) ->
+  %case solved(M) of
+    
+
+    
 solve_refined(M) ->
     case solved(M) of
 	true ->
@@ -247,7 +275,7 @@ benchmarks(Puzzles) ->
     [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
-  {ok,Puzzles} = file:consult("problems.txt"),
+  {ok,Puzzles} = file:consult("diablo.txt"),
   timer:tc(?MODULE,benchmarks,[Puzzles]).
 		      
 %% check solutions for validity
