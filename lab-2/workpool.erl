@@ -54,9 +54,16 @@ speculate_on_worker(F) ->
     end.
 
 worker_value_of({not_speculating,F}) ->
+   % newLog("Busy"),
     F();
 worker_value_of({speculating,R}) ->
+   % newLog("Speculating"),    
     receive
 	{R,X} ->
 	    X
     end.
+
+
+newLog(Data) ->
+  io:format("Value is : ~p",[Data]),
+  io:nl().

@@ -196,6 +196,7 @@ guesses(M) ->
 	  [{hard(NewM),NewM}
 	   || NewM <- Ms,
 	      not is_exit(NewM)]),
+   % newLog(length(SortedGuesses)),
     [G || {_,G} <- SortedGuesses].
 
 update_element(M,I,J,G) ->
@@ -264,17 +265,13 @@ solve_parallel(M) ->
 	end.
 
 solve_rec([]) -> false;
-% solve_rec(Ms) when length(Ms) < 2 ->
-% 	case catch solve_one(Ms) of
-% 		{'EXIT',_} -> false;
-% 		Solution -> Solution
-% 	end;
+solve_rec(Ms) when length(Ms) < 1 ->
+  case catch solve_one(Ms) of
+    {'EXIT',_} -> false;
+    Solution -> Solution
+  end;
 solve_rec([M|Ms]) -> 
-	Pid =
-		if
-		 	hard(M) > 20 -> speculate_on_worker(fun() -> solve_parallel(M) end);
-		 	true -> speculate_on_worker(fun() -> solve_refined(M) end)
-	 	end,
+	Pid = speculate_on_worker(fun() -> solve_parallel(M) end),
 	case solve_rec(Ms) of
 		false -> worker_value_of(Pid); % {'EXIT',no_solution}
 		Solution -> Solution
