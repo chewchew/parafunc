@@ -101,7 +101,6 @@ refine(M) ->
 	    refine(NewM)
     end.
 
-%parmap(_, []) -> [];
 parmap(F, Ls) ->
 	Parent = self(),
 	Refs = lists:map(fun(X) -> spawn(fun() ->
@@ -113,8 +112,10 @@ parmap(F, Ls) ->
 	lists:map(fun(Ref) -> receive {Ref,Val} -> Val end end, Refs).
 
 refine_rows(M) ->
+	% Parallel refine_rows:
     % parmap(fun refine_row/1,M).
 
+    % Sequential refine_rows:
     lists:map(fun refine_row/1,M).
 
 refine_row(Row) ->
@@ -217,6 +218,27 @@ solve(M) ->
 		    exit({invalid_solution,Solution})
     end.
 
+solve_refined(M) ->
+    case solved(M) of
+	true ->
+	    M;
+	false ->
+	    solve_one(guesses(M))
+    end.
+
+solve_one([]) ->
+    exit(no_solution);
+solve_one([M]) ->
+    solve_refined(M);
+solve_one([M|Ms]) ->
+    case catch solve_refined(M) of
+	{'EXIT',no_solution} ->
+	    solve_one(Ms);
+	Solution ->
+	    Solution
+    end.
+
+% solved using parmap over the guesses
 solve_pmap(M) ->
     Solution = solve_pmap_parallel(6,refine(fill(M))),
 	case valid_solution(Solution) of
@@ -240,9 +262,10 @@ solve_pmap_rec(D,Ms) ->
 	Solutions = lists:filter(fun(Answer) -> not is_exit(Answer) end, Answers),
 	hd(Solutions).
 
+% solved using a worker pool
 solve_pool(M) ->
     start_pool(erlang:system_info(schedulers)-1),
-    Solution = solve_parallel(refine(fill(M))),
+    Solution = solve_pool_parallel(refine(fill(M))),
     pool ! {stop,self()},
     receive {pool,stopped} -> case valid_solution(Solution) of
 		true ->
@@ -252,56 +275,94 @@ solve_pool(M) ->
 	    end
 	end.
 
-solve_parallel(M) -> 
+solve_pool_parallel(M) -> 
 	case solved(M) of
 		true  -> M;
-		false -> solve_rec(guesses(M))
+		false -> solve_pool_rec(guesses(M))
 	end.
 
-solve_rec([]) -> false;
-% solve_rec(Ms) when length(Ms) < 2 ->
-% 	case catch solve_one(Ms) of
-% 		{'EXIT',_} -> false;
-% 		Solution -> Solution
-% 	end;
-solve_rec([M|Ms]) -> 
-	Pid =
-		if
-		 	hard(M) > 20 -> speculate_on_worker(fun() -> solve_parallel(M) end);
-		 	true -> speculate_on_worker(fun() -> solve_refined(M) end)
-	 	end,
-	case solve_rec(Ms) of
-		false -> worker_value_of(Pid); % {'EXIT',no_solution}
+solve_pool_rec([]) -> false;
+solve_pool_rec([M|Ms]) ->
+	Pid = speculate_on_worker(fun() -> solve_pool_parallel(M) end),
+	case solve_pool_rec(Ms) of
+		false ->  worker_value_of(Pid);
 		Solution -> Solution
 	end.
 
-solve_refined(M) ->
-    case solved(M) of
-	true ->
-	    M;
-	false ->
-	    solve_one(guesses(M))
-    end.
+% solved using a worker pool and doing sequential execution on puzzles easier than 100
+solve_pool1(M) ->
+    start_pool(erlang:system_info(schedulers)-1),
+    Solution = solve_pool1_parallel(refine(fill(M))),
+    pool ! {stop,self()},
+    receive {pool,stopped} -> case valid_solution(Solution) of
+		true ->
+		    Solution;
+		false ->
+		    exit({invalid_solution,Solution})
+	    end
+	end.
 
-solve_one([]) ->
-    exit(no_solution);
-% solve_one(Ms) ->
-% 	As = lists:map(fun(M) -> catch solve_refined(M) end,Ms),
-% 	Ss = lists:filter(fun(M) -> not is_exit(M) end, As),
-% 	hd(Ss).
-solve_one([M]) ->
-    solve_refined(M);
-solve_one([M|Ms]) ->
-    case catch solve_refined(M) of
-	{'EXIT',no_solution} ->
-	    solve_one(Ms);
-	Solution ->
-	    Solution
-    end.
+solve_pool1_parallel(M) -> 
+	case solved(M) of
+		true  -> M;
+		false -> solve_pool1_rec(guesses(M))
+	end.
+
+solve_pool1_rec([]) -> false;
+solve_pool1_rec([M|Ms]) ->
+	Hard = hard(M),
+	Pid =
+		% The idea: If the puzzle is too easy then run it on one thread (job getting too small)
+		if
+		 	Hard >= 120 -> speculate_on_worker(fun() -> solve_pool1_parallel(M) end);
+		 	true -> speculate_on_worker(fun() -> 
+		 			case catch solve_refined(M) of 
+		 				{'EXIT',_} -> false;
+		 				Solution -> Solution
+		 			end
+		 		end)
+	 	end,
+	case solve_pool1_rec(Ms) of
+		false ->  worker_value_of(Pid);
+		Solution -> Solution
+	end.
+
+% solved using a worker pool and doing sequential execution on small guesses
+solve_pool2(M) ->
+    start_pool(erlang:system_info(schedulers)-1),
+    Solution = solve_pool2_parallel(refine(fill(M))),
+    pool ! {stop,self()},
+    receive {pool,stopped} -> case valid_solution(Solution) of
+		true ->
+		    Solution;
+		false ->
+		    exit({invalid_solution,Solution})
+	    end
+	end.
+
+solve_pool2_parallel(M) -> 
+	case solved(M) of
+		true  -> M;
+		false -> solve_pool2_rec(guesses(M))
+	end.
+
+solve_pool2_rec([]) -> false;
+% if we only have one guess run a sequential version
+solve_pool2_rec(Ms) when length(Ms) < 2 ->
+	case catch solve_one(Ms) of
+		{'EXIT',_} -> false;
+		Solution -> Solution
+	end;
+solve_pool2_rec([M|Ms]) ->
+	Pid = speculate_on_worker(fun() -> solve_pool2_parallel(M) end),
+	case solve_pool2_rec(Ms) of
+		false -> worker_value_of(Pid);
+		Solution -> Solution
+	end.
 
 %% benchmarks
 
--define(EXECUTIONS,100).
+-define(EXECUTIONS,10).
 
 bm(F) ->
     {T,_} = timer:tc(?MODULE,repeat,[F]),
@@ -319,8 +380,14 @@ benchmarks(Puzzles) ->
 	% 	end) || {Name,M} <- Puzzles ],
 	% [ receive {Pid,R} -> R end || Pid <- Pids ].
 
-	% Sequential
-    [ {Name, bm( fun()-> solve_pool(M) end )} || {Name,M} <- Puzzles].
+	% Sequential solve:
+    [ {Name, bm( fun()-> solve(M) end )} || {Name,M} <- Puzzles].
+
+    % Parallel solve's:
+    % [ {Name, bm( fun()-> solve_pmap(M) end )} || {Name,M} <- Puzzles].
+    % [ {Name, bm( fun()-> solve_pool(M) end )} || {Name,M} <- Puzzles].
+    % [ {Name, bm( fun()-> solve_pool1(M) end )} || {Name,M} <- Puzzles].
+    % [ {Name, bm( fun()-> solve_pool2(M) end )} || {Name,M} <- Puzzles].
 
 benchmarks() ->
   {ok,Puzzles} = file:consult("problems.txt"),

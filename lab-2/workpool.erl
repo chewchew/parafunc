@@ -1,3 +1,4 @@
+% Taken from the exercise session with Anton
 -module (workpool).
 -compile (export_all).
 
