@@ -27,3 +27,8 @@ page_rank_par() ->
     map_reduce:map_reduce_par(fun map/2, 32, fun reduce/2, 32, 
 			      [{Url,ok} || Url <- Urls]).
 
+page_rank_par_dist() ->
+    dets:open_file(web,[{file,"web.dat"}]),
+    Urls = dets:foldl(fun({K,_},Keys)->[K|Keys] end,[],web),
+    map_reduce:map_reduce_par_dist(fun map/2, 32, fun reduce/2, 32, 
+			      [{Url,ok} || Url <- Urls]).

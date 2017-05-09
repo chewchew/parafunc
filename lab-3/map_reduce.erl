@@ -54,6 +54,7 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     % Get connected nodes
     Nodes = [node()|nodes()],
     Splits = split_into(M,Input),
+    Parent = self(),
     % Split work up work nodes
     NodeSplits = split_into(length(Nodes),Splits),
     Mappers = 
@@ -63,8 +64,8 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Mappers)],
     NodeReducerSplits = split_into(length(Nodes),lists:seq(0,R-1)),
     Reducers = 
-    [spawn_reducers(Parent,Reduce,Is,Mappeds) 
-     || Is <- NodeReducerSplits],
+    [spawn_reducers(RNode,Parent,Reduce,Is,Mappeds) 
+     || {RNode,Is} <- lists:zip(Nodes,NodeReducerSplits)],
     Reduceds = 
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Reducers)],
     lists:sort(lists:flatten(Reduceds)).
