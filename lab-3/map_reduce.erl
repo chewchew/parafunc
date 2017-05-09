@@ -50,6 +50,21 @@ map_reduce_par(Map,M,Reduce,R,Input) ->
 	[receive {Pid,L} -> L end || Pid <- Reducers],
     lists:sort(lists:flatten(Reduceds)).
 
+map_reduce_par_dist(Map,M,Reduce,R,Input) ->
+    Nodes = nodes(),
+    Splits = split_into(M,Input),
+    Mappers = 
+    [spawn_mapper(Parent,Map,R,Split)
+     || Split <- Splits],
+    Mappeds = 
+    [receive {Pid,L} -> L end || Pid <- Mappers],
+    Reducers = 
+    [spawn_reducer(Parent,Reduce,I,Mappeds) 
+     || I <- lists:seq(0,R-1)],
+    Reduceds = 
+    [receive {Pid,L} -> L end || Pid <- Reducers],
+    lists:sort(lists:flatten(Reduceds)).
+
 spawn_mapper(Parent,Map,R,Split) ->
     spawn_link(fun() ->
 			Mapped = [{erlang:phash2(K2,R),{K2,V2}}
