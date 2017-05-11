@@ -91,7 +91,7 @@ job_pool(Funs) ->
   end.
 
 worker(Node) ->
-  
+
 spawn_mappers(Node,ParentNode,ParentPid,Map,R,Splits) -> 
     [spawn_link(Node,fun() ->
       Mapped = [{erlang:phash2(K2,R),{K2,V2}}
