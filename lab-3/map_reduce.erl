@@ -52,7 +52,10 @@ map_reduce_par(Map,M,Reduce,R,Input) ->
 
 map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     % Get connected nodes
-    register(master,self()),
+    case whereis(master) of
+      undefined -> register(master,self());
+      _ -> ok
+    end,
     Nodes = nodes(),
     Splits = split_into(M,Input),
     Parent = node(),
@@ -61,7 +64,7 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     Mappers = 
     [spawn_mappers(Node,Parent,self(),Map,R,SplitForNode)
      || {Node,SplitForNode} <- lists:zip(Nodes,NodeSplits)],
-    io:format("Mappers: ~p~n",[Mappers]),
+    % io:format("Mappers: ~p~n",[Mappers]),
     Mappeds = 
     [receive 
        {Pid,L} -> L
@@ -70,7 +73,7 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     Reducers = 
     [spawn_reducers(RNode,Parent,Reduce,Is,Mappeds) 
      || {RNode,Is} <- lists:zip(Nodes,NodeReducerSplits)],
-    io:format("Reducers: ~p~n",[Reducers]),
+    % io:format("Reducers: ~p~n",[Reducers]),
     Reduceds = 
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Reducers)],
     lists:sort(lists:flatten(Reduceds)).
@@ -80,8 +83,8 @@ spawn_mappers(Node,ParentNode,ParentPid,Map,R,Splits) ->
       Mapped = [{erlang:phash2(K2,R),{K2,V2}}
           || {K,V} <- Split,
              {K2,V2} <- Map(K,V)],
-      io:format("Spawned on  ~p~n",[{self(),Node}]),
-      io:format("Sent to  ~p~n",[{ParentPid,ParentNode}]),
+      % io:format("Spawned on  ~p~n",[{self(),Node}]),
+      % io:format("Sent to  ~p~n",[{ParentPid,ParentNode}]),
       {master,ParentNode} ! {self(),group(lists:sort(Mapped))}
     end) 
      || Split <- Splits].

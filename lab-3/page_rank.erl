@@ -47,3 +47,6 @@ benchmark_seq() ->
 
 benchmark_par() ->
     bm(fun page_rank_par/0)/1000.
+
+benchmark_par_dist() ->
+    bm(fun page_rank_par_dist/0)/1000.
