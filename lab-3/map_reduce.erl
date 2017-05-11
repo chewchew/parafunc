@@ -78,19 +78,37 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Reducers)],
     lists:sort(lists:flatten(Reduceds)).
 
-job_pool(Funs) ->
-  receive
-    {get_job,Worker} -> 
-      case Funs of
-        [] -> Worker ! no_jobs
-        [F|Fs] ->
-          Worker ! F,
-          job_pool(Fs);
-    {add_job,Fun} ->
-      job_pool([Fun|Funs])
-  end.
+map_reduce_par_dist_load(Map,M,Reduce,R,Input) ->
+    Master = self(),
+    Nodes = nodes(),
+    Splits = split_into(M,Input),
+    Mappers = 
+	[{I, fun() -> mapper(Map,R,Split) end} 
+	 || {I,Split} <- lists:zip(lists:seq(1,M),Splits)],
+    Pool = start_job_pool(Mappers),
+    Workers = init_workers(Master,Pool),
+    Mappeds = 
+	[receive {Id,L} -> L end || {Id,_} <- Mappers],
+    Reducers = 
+	[{I,fun() -> reducer(Reduce,I,Mappeds) end}
+	 || I <- lists:seq(0,R-1)],
+    Reduceds = 
+	[receive {Id,L} -> L end || {Id,_} <- Reducers],
+    lists:sort(lists:flatten(Reduceds)).
 
-worker(Node) ->
+mapper(Map,R,Split) -> 
+    Mapped = [{erlang:phash2(K2,R),{K2,V2}}
+      || {K,V} <- Split,
+           {K2,V2} <- Map(K,V)],
+    group(lists:sort(Mapped)).
+
+reducer(Reduce,I,Mappeds) ->
+    Inputs = [KV
+	      || Mapped <- Mappeds,
+		 {J,KVs} <- Mapped,
+		 I==J,
+		 KV <- KVs],
+    reduce_seq(Reduce,Inputs).
   
 spawn_mappers(Node,ParentNode,ParentPid,Map,R,Splits) -> 
     [spawn_link(Node,fun() ->
