@@ -33,7 +33,7 @@ page_rank_par_dist() ->
     map_reduce:map_reduce_par_dist(fun map/2, 32, fun reduce/2, 32, 
 			      [{Url,ok} || Url <- Urls]).
 
--define(EXECUTIONS,10).
+-define(EXECUTIONS,1).
 
 repeat(F) ->
     [F() || _ <- lists:seq(1,?EXECUTIONS)].
@@ -48,5 +48,5 @@ benchmark_seq() ->
 benchmark_par() ->
     bm(fun page_rank_par/0)/1000.
 
-benchmark_par_dist() ->
+benchmark_par_dist() -> 
     bm(fun page_rank_par_dist/0)/1000.
