@@ -22,6 +22,7 @@ lab-1/given
 lab-1/msort
 *.beam
 test.dat
+erl_crash.dump
 
 *.DS_Store
 .AppleDouble
