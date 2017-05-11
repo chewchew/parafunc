@@ -1,10 +1,10 @@
 -module(workerpool).
 -compile(export_all).
 
--define(EXECUTIONS,5).
--define(N_JOBS,1000000).
+-define(EXECUTIONS,10).
+-define(N_JOBS,500000).
 -define(N_SPLITS,50).
--define(N_WORKERS,8).
+-define(N_WORKERS,4).
 
 add(X,Y) ->
 	X + Y.
@@ -64,7 +64,7 @@ start(Jobs) ->
 	Nodes  = nodes(),
 	Pool = start_job_pool(Jobs),
 	Workers = init_workers(Master,Pool,Nodes,?N_WORKERS),
-	ResAdd = [receive {JobId,R} -> R end || {JobId,_} <- Jobs].
+	[receive {JobId,R} -> R end || {JobId,_} <- Jobs].
 	% io:format("~w~n", [lists:sum([receive {JobId,R} -> lists:sum(R) end || {JobId,_} <- Jobs])]).
 
 start_seq(Jobs) ->
