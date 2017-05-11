@@ -52,20 +52,25 @@ map_reduce_par(Map,M,Reduce,R,Input) ->
 
 map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     % Get connected nodes
-    Nodes = [node()|nodes()],
+    Nodes = nodes(),
     Splits = split_into(M,Input),
-    Parent = self(),
+    Parent = node(),
     % Split work up work nodes
     NodeSplits = split_into(length(Nodes),Splits),
     Mappers = 
     [spawn_mappers(Node,Parent,Map,R,SplitForNode)
      || {Node,SplitForNode} <- lists:zip(Nodes,NodeSplits)],
+    io:format("Mappers: ~p~n",[Mappers]),
     Mappeds = 
-    [receive {Pid,L} -> L end || Pid <- lists:flatten(Mappers)],
-    NodeReducerSplits = split_into(length(Nodes),lists:seq(0,R-1)),
+    [receive 
+       {Pid,L} -> L;
+       Rest -> io:format("Rest: ~p~n",[Rest])
+     end || Pid <- lists:flatten(Mappers)],
+    NodeReducerSplits = split_into(length(Parent),lists:seq(0,R-1)),
     Reducers = 
     [spawn_reducers(RNode,Parent,Reduce,Is,Mappeds) 
      || {RNode,Is} <- lists:zip(Nodes,NodeReducerSplits)],
+    io:format("Reducers: ~p~n",[Reducers]),
     Reduceds = 
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Reducers)],
     lists:sort(lists:flatten(Reduceds)).
@@ -75,7 +80,8 @@ spawn_mappers(Node,Parent,Map,R,Splits) ->
       Mapped = [{erlang:phash2(K2,R),{K2,V2}}
           || {K,V} <- Split,
              {K2,V2} <- Map(K,V)],
-      {master,Node} ! {self(),group(lists:sort(Mapped))}
+      io:format("Spawned on  ~p~n",[{self(),Node}]),
+      {master,Parent} ! {self(),group(lists:sort(Mapped))}
     end) 
      || Split <- Splits].
 
@@ -103,7 +109,7 @@ spawn_reducer(Node,Parent,Reduce,I,Mappeds) ->
          {J,KVs} <- Mapped,
          I==J,
          KV <- KVs],
-    spawn_link(Node,fun() -> {master,Node} ! {self(),reduce_seq(Reduce,Inputs)} end).
+    spawn_link(Node,fun() -> {master,Parent} ! {self(),reduce_seq(Reduce,Inputs)} end).
 
 spawn_reducers(Node, Parent,Reduce,Is,Mappeds) ->
     [spawn_reducer(Node, Parent, Reduce, I, Mappeds) || I <- Is].
