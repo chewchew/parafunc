@@ -32,3 +32,18 @@ page_rank_par_dist() ->
     Urls = dets:foldl(fun({K,_},Keys)->[K|Keys] end,[],web),
     map_reduce:map_reduce_par_dist(fun map/2, 32, fun reduce/2, 32, 
 			      [{Url,ok} || Url <- Urls]).
+
+-define(EXECUTIONS,10).
+
+repeat(F) ->
+    [F() || _ <- lists:seq(1,?EXECUTIONS)].
+
+bm(F) ->
+    {T,_} = timer:tc(?MODULE,repeat,[F]),
+    T/?EXECUTIONS/1000.
+
+benchmark_seq() ->
+    bm(fun page_rank/0)/1000.
+
+benchmark_par() ->
+    bm(fun page_rank_par/0)/1000.
