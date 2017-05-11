@@ -78,6 +78,20 @@ map_reduce_par_dist(Map,M,Reduce,R,Input) ->
     [receive {Pid,L} -> L end || Pid <- lists:flatten(Reducers)],
     lists:sort(lists:flatten(Reduceds)).
 
+job_pool(Funs) ->
+  receive
+    {get_job,Worker} -> 
+      case Funs of
+        [] -> Worker ! no_jobs
+        [F|Fs] ->
+          Worker ! F,
+          job_pool(Fs);
+    {add_job,Fun} ->
+      job_pool([Fun|Funs])
+  end.
+
+worker(Node) ->
+  
 spawn_mappers(Node,ParentNode,ParentPid,Map,R,Splits) -> 
     [spawn_link(Node,fun() ->
       Mapped = [{erlang:phash2(K2,R),{K2,V2}}
