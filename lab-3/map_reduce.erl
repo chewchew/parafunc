@@ -5,6 +5,7 @@
 
 -module(map_reduce).
 -compile(export_all).
+-import(workerpool,[start/1]).
 
 %% We begin with a simple sequential implementation, just to define
 %% the semantics of map-reduce. 
@@ -82,18 +83,12 @@ map_reduce_par_dist_load(Map,M,Reduce,R,Input) ->
     Master = self(),
     Nodes = nodes(),
     Splits = split_into(M,Input),
-    Mappers = 
-	[{I, fun() -> mapper(Map,R,Split) end} 
-	 || {I,Split} <- lists:zip(lists:seq(1,M),Splits)],
-    Pool = start_job_pool(Mappers),
-    Workers = init_workers(Master,Pool),
-    Mappeds = 
-	[receive {Id,L} -> L end || {Id,_} <- Mappers],
-    Reducers = 
-	[{I,fun() -> reducer(Reduce,I,Mappeds) end}
-	 || I <- lists:seq(0,R-1)],
-    Reduceds = 
-	[receive {Id,L} -> L end || {Id,_} <- Reducers],
+    Mappers = [{I, fun() -> 
+      mapper(Map,R,Split) end} || {I,Split} <- lists:zip(lists:seq(1,M),Splits)],
+    Mappeds = start(Mappers),
+    Reducers = [{I,fun() -> 
+      reducer(Reduce,I,Mappeds) end} || I <- lists:seq(0,R-1)],
+    Reduceds = start(Reducers),
     lists:sort(lists:flatten(Reduceds)).
 
 mapper(Map,R,Split) -> 
