@@ -20,7 +20,6 @@ job_pool(Jobs) ->
 		{get_job,Worker} ->
 			case Jobs of
 				[J|Js] ->
-					% io:format("~w->~w~n",[Worker,J]),
 					Worker ! J,
 					job_pool(Js);
 				[] ->
@@ -50,18 +49,27 @@ init_workers(Master,Pool,Nodes,NWorkers) ->
 					end) || _ <- lists:seq(1,NWorkers)] 
 			end, Nodes)).
 
+% Main entry-point, takes a list of Jobs and 
+% calls all initiation functions
 start(Jobs) ->
 	Master = self(),
 	Nodes  = nodes(),
 	Pool = start_job_pool(Jobs),
 	Workers = init_workers(Master,Pool,Nodes,?N_WORKERS),
-	lists:filter(fun(X) -> case X of sig -> false; _ -> true end end,[receive 
-			{JobId,R} -> R;
-			{'EXIT',From,normal} ->
-				io:format("Node ~w finished with no problem.~n",[From]),
-				sig;
-			{'EXIT',From,Reason} -> 
-				io:format("Node ~w ~w, running job on main thread.~n",[From,Reason]),
-				spawn(backup,worker,[Master,Pool]),
-				sig
-		end || {JobId,_} <- Jobs]).
+	lists:filter(fun(X) -> 
+		case X of 
+			exit -> false; 
+			_ -> true 
+		end 
+	end,
+	[receive 
+		{JobId,R} -> R;
+		{'EXIT',From,normal} ->
+			io:format("Node ~w finished with no problem.~n",[From]),
+			exit;
+		{'EXIT',From,Reason} -> 
+			WorkerPid = spawn_link(fun() -> worker(Master,Pool) end),
+			io:format("Node ~w ~w, running job on main thread as ~w.~n",
+				[From,Reason,WorkerPid]),
+			exit
+	end || {JobId,_} <- Jobs]).

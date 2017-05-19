@@ -27,18 +27,21 @@ page_rank_par() ->
     map_reduce:map_reduce_par(fun map/2, 32, fun reduce/2, 32, 
 			      [{Url,ok} || Url <- Urls]).
 
+% page_rank_par but distributed on available nodes
 page_rank_par_dist() ->
     dets:open_file(web,[{file,"web.dat"}]),
     Urls = dets:foldl(fun({K,_},Keys)->[K|Keys] end,[],web),
     map_reduce:map_reduce_par_dist(fun map/2, 32, fun reduce/2, 32, 
 			      [{Url,ok} || Url <- Urls]).
 
+%uses a jobpool, with workers on diffrent nodes able to take work from the pool
 page_rank_par_dist_load() ->
     dets:open_file(web,[{file,"web.dat"}]),
     Urls = dets:foldl(fun({K,_},Keys)->[K|Keys] end,[],web),
     map_reduce:map_reduce_par_dist_load(fun map/2, 32, fun reduce/2, 32, 
-                  [{Url,ok} || Url <- Urls]).
+                      [{Url,ok} || Url <- Urls]).
 
+% Below are functions for benchmarking the different versions
 -define(EXECUTIONS,10).
 
 repeat(F) ->
