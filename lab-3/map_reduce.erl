@@ -84,7 +84,8 @@ map_reduce_par_dist_load(Map,M,Reduce,R,Input) ->
     Nodes = nodes(),
     Splits = split_into(M,Input),
     Mappers = [{I, fun() -> 
-      mapper(Map,R,Split) end} || {I,Split} <- lists:zip(lists:seq(1,M),Splits)],
+      mapper(Map,R,Split) 
+    end} || {I,Split} <- lists:zip(lists:seq(1,M),Splits)],
     Mappeds = start(Mappers),
     Reducers = [{I,fun() -> 
       reducer(Reduce,I,Mappeds) end} || I <- lists:seq(0,R-1)],
