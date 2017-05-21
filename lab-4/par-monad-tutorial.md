@@ -3,7 +3,6 @@
 A great way to write parallel Haskell program is to utilize the Par Monad. This library avoids some problems with lazy evaluations in parallel and is very explicit regarding granularity and data dependencies. If a solution to your problem can be described using a data flow graph, look no further.
 
 ### Building parallelism with (kn)IVars and forks
-
 Here is a small example of consuming meatballs in parallel
 ````haskell
 finishPlate :: [Meatballs] -> TastedGood
@@ -18,8 +17,9 @@ finishPlate mbs = runPar $ do
   return (aIsOk and bIsOk)
 ````
 We are spawning to parallel computations to determine wether or not the meatballs tasted good 
-and then returning the result using IVars.
-IVars can be loosely be descirbed as write-once variables used to communicate
+and then returning the result using `IVar`'s. 
+
+`IVar`'s can be loosely be descirbed as write-once variables used to communicate
 values between parallel computations. In order to get parallel computations, we
 need to use a fork. 
 
@@ -44,4 +44,8 @@ A great way to visualize the parallelism, created using the Par Monad, is a data
 
 ![alt text][meatballgraph]
 
+So this is what the parallelism looks like!
+
+### Show me something real!
+Matrix multiplication...
 
