@@ -1,4 +1,7 @@
 [meatballgraph]: ./dataflowmeatballgraph.png "Data Flow Graph"
+[qsort]: ./dfqsort.png "Data Flow Qsort"
+[matrix]: ./dfmatrixprod.png "Data Flow Matrix"
+
 ## Using the Par Monad for parallel Haskell programming
 A great way to write parallel Haskell program is to utilize the Par Monad. This library avoids some problems with lazy evaluations in parallel and is very explicit regarding granularity and data dependencies. If a solution to your problem can be described using a data flow graph, look no further.
 
@@ -107,10 +110,14 @@ main = do
         bench "qsortSeq" (nf qsortSeq (rlist (mkStdGen 0) n)),
         bench "qsortPar" (nf (runPar . qsortPar k) (rlist (mkStdGen 0) n))]
 ```
+We recursivley quicksort in parallel to a certain depth. We do this because we don't want each parallel comutation to have to little work. By doing this we get a speedup of 1.65 compared to running the sequential quicksort. This is on a 4-core machine so the speedup isn't great but it's there.  
 
+Here is a visualization of the parallel computation with a data flow graph.
+![alt text][qsort]
+We used a depth of 4 but in this graph the depth is 2. However itis there to give some sorrt of representation of what we're doing in parallel. Recursively calling quciksort on sublists.
 
 #### Matrix multiplication
-Here is antoher example of parallel Haskell using the Par Monad. In this case it's not a typical divide and conquer solution. We ar going to show you parallel matrix multiplication in Haskell.
+Here is antoher example of parallel Haskell using the Par Monad. In this case it's not a typical divide and conquer solution. We are going to show you parallel matrix multiplication in Haskell.
 
 Our solution uses the built in function `parMap` to map matrix vector multiplaction over a bunch of columns. Remember `spawn`? Not the 90's movie but the function defined above. **:smirking-face:** This function is used by `parMap` to fork new parallel computations.
 
@@ -169,3 +176,8 @@ main = do
         bench "matrixProd" (nf (runPar . matrixProd bigMatrix) bigMatrix)]
 ```
 
+
+Matrix
+Seq: 0.965 s
+Par: 0.529 s
+![alt text][matrix]
