@@ -3,15 +3,15 @@ matprod=MatrixProd
 qsort=QuickSort
 
 all: 
-	ghc --make -O2 $(qsort).hs -rtsopts -threaded
-	# ghc --make -O2 $(matprod).hs -rtsopts -threaded
+	# ghc --make -O2 $(qsort).hs -rtsopts -threaded
+	ghc --make -O2 $(matprod).hs -rtsopts -threaded
 
 #Use 2 cores and lf is for eventlog and sparp sizes
 #Also setting GC's allocation area to very large (100mb) 
 #to avoid garbage collection
 run: 
-	./$(qsort) +RTS -s -N2
-	# ./$(matprod) +RTS -s -N2
+	# ./$(qsort) +RTS -s -N2
+	./$(matprod) +RTS -s -N2
 
 clean:
 	rm -f *.eventlog

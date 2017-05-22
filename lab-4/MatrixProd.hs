@@ -3,7 +3,7 @@ module Main where
 import Control.Monad.Par
 import Criterion.Main
 
-type Matrix = [[Int]]
+type Matrix = [Vector]
 type Vector = [Int]
 
 identityMatrix3 :: Matrix
@@ -26,34 +26,36 @@ transpose (r:[]) = transposeRow r
 transpose (r:m) = [l ++ r | (l,r) <- zip rt (transpose m)]
     where rt = transposeRow r
 
-parMap' :: NFData b => (a -> b) -> [a] -> Par [b]
-parMap' f as = do
-    ibs <- mapM (spawn . return . f) as
-    mapM get ibs
-
 vectorVectorProd :: Vector -> Vector -> Int
 vectorVectorProd v1 v2 = sum [x1 * x2 | (x1,x2) <- zip v1 v2]
 
-matrixVectorProd :: Matrix -> Vector -> Par Vector
-matrixVectorProd m v = parMap (\ mv -> vectorVectorProd mv v ) (transpose m)
+matrixVectorProd :: Matrix -> Vector -> Vector
+matrixVectorProd m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
 
-matrixProd :: Matrix -> Matrix -> Par Matrix
-matrixProd lm rm = parMap (\ lmr -> matrixVectorProdSeq rm lmr) lm
+makeChunks :: Int -> Matrix -> [[Vector]]
+makeChunks chunkSize [] = []
+makeChunks chunkSize m  = take chunkSize m : makeChunks chunkSize (drop chunkSize m)
 
-matrixVectorProdSeq :: Matrix -> Vector -> Vector
-matrixVectorProdSeq m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
+matrixProdPar :: Int -> Matrix -> Matrix -> Matrix
+matrixProdPar chunkSize lm rm = concat . runPar $ parMap 
+    (\rows -> matrixProdPar' rm rows) (makeChunks chunkSize lm)
+
+matrixProdPar' :: Matrix -> [Vector] -> Matrix
+matrixProdPar' m rows = map (\ row -> matrixVectorProd m row) rows
 
 matrixProdSeq :: Matrix -> Matrix -> Matrix
-matrixProdSeq lm rm = map (\ lmr -> matrixVectorProdSeq rm lmr) lm
+matrixProdSeq lm rm = map (\ lmr -> matrixVectorProd rm lmr) lm
 
 -- how it works
 -- benchmarks
+-- chunking
 -- data flow
 main :: IO()
 main = do
-    -- defaultMain [
-    --     bench "matrixProd" (nf (runPar . matrixProd bigMatrix) bigMatrix),
-    --     bench "matrixProdSeq" (nf (matrixProdSeq bigMatrix) bigMatrix)]
     defaultMain [
-        bench "matrixProd" (nf (runPar . matrixProd bigMatrix) bigMatrix)]
-    -- print $ head $ runPar (matrixProd bigMatrix bigMatrix)
+        bench "matrixProdPar" (nf (matrixProdPar 20 bigMatrix) bigMatrix),
+        bench "matrixProdSeq" (nf (matrixProdSeq bigMatrix) bigMatrix)]
+    -- defaultMain [
+    --     bench "matrixProdPar" (nf (matrixProdPar 10 bigMatrix) bigMatrix)]
+    -- print $ makeChunks 1 testMatrix1
+    -- print $ matrixProdPar 1 testMatrix1 testMatrix1
