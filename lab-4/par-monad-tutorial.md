@@ -32,6 +32,7 @@ Here are some basic functions that can help us with our cutlery:
   put :: NFDATA a => IVar a -> a -> Par ()  -- put the value in the supplied IVar
   get :: IVar a -> Par a                    -- get the value from an IVar 
   fork :: Par () -> Par ()                  -- fork a computation to happen in parallel
+  runPar :: Par a -> a                      -- run a parallel computation and return it's result
 ````
 
 Two important things to know about the above functions is that `put` evaluates the
@@ -138,11 +139,8 @@ module Main where
 import Control.Monad.Par
 import Criterion.Main
 
-type Matrix = [[Int]]
+type Matrix = [Vector]
 type Vector = [Int]
-
-identityMatrix3 :: Matrix
-identityMatrix3 = [[1,0,0],[0,1,0],[0,0,1]]
 
 bigMatrix :: Matrix
 bigMatrix = [[1..500] | _ <- [1..100]]
@@ -158,26 +156,36 @@ transpose (r:m) = [l ++ r | (l,r) <- zip rt (transpose m)]
 vectorVectorProd :: Vector -> Vector -> Int
 vectorVectorProd v1 v2 = sum [x1 * x2 | (x1,x2) <- zip v1 v2]
 
-matrixVectorProd :: Matrix -> Vector -> Par Vector
-matrixVectorProd m v = parMap (\ mv -> vectorVectorProd mv v ) (transpose m)
+matrixVectorProd :: Matrix -> Vector -> Vector
+matrixVectorProd m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
 
-matrixProd :: Matrix -> Matrix -> Par Matrix
-matrixProd lm rm = parMap (\ lmr -> matrixVectorProdSeq rm lmr) lm
+makeChunks :: Int -> Matrix -> [[Vector]]
+makeChunks chunkSize [] = []
+makeChunks chunkSize m  = take chunkSize m : makeChunks chunkSize (drop chunkSize m)
 
-matrixVectorProdSeq :: Matrix -> Vector -> Vector
-matrixVectorProdSeq m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
+matrixProdPar :: Int -> Matrix -> Matrix -> Matrix
+matrixProdPar chunkSize lm rm = concat . runPar $ parMap 
+    (\rows -> matrixProdPar' rm rows) (makeChunks chunkSize lm)
+
+matrixProdPar' :: Matrix -> [Vector] -> Matrix
+matrixProdPar' m rows = map (\ row -> matrixVectorProd m row) rows
 
 matrixProdSeq :: Matrix -> Matrix -> Matrix
-matrixProdSeq lm rm = map (\ lmr -> matrixVectorProdSeq rm lmr) lm
+matrixProdSeq lm rm = map (\ lmr -> matrixVectorProd rm lmr) lm
 
 main :: IO()
 main = do
     defaultMain [
-        bench "matrixProd" (nf (runPar . matrixProd bigMatrix) bigMatrix)]
+        bench "matrixProdPar" (nf (matrixProdPar 10 bigMatrix) bigMatrix),
+        bench "matrixProdSeq" (nf (matrixProdSeq bigMatrix) bigMatrix)]
 ```
+Here we are creating chunks of rows in one matrix to be multiplied with each column in the other matrix. Each of these chunks is one parallel computation spawned in parMap. The speedup up we got from running this matrix multiplication in parallel, compared to the sequential version, is 1.82 on a 4-core machine. 
 
-
-Matrix
-Seq: 0.965 s
-Par: 0.529 s
 ![alt text][matrix]
+
+Here is the parallelism described by a data flow graph.
+
+### The Par Monad is A-ok
+We have showed som simple examples of how to parallelize in Haskell using the Par Monad. It's has a really nice API and you can get a really nice representation of the prallelism using data flow graphs. It also eliminates some of the problems of lazy evaluation when diagnosing performance and you are given a lot of control as a programmer.
+
+But as a famous politician once said: *I don't stand by anything* 
