@@ -47,13 +47,14 @@ A great way to visualize the parallelism, created using the Par Monad, is a data
 So this is what the parallelism looks like!
 
 ### the Par monad in the wild
+Lets explore two examples of the Par Monad, quicksort and matrix multiplication. Quicksort has a nice divide and conquer property that works well in the context of data flow graphs. Matrix multiplication is solved with a simple map in parallel.
 
 #### Quicksort
+Quicksort, quicksort, quicksort... We have spent to much time together. But lets have one more go at each other. 
 
-#### Matrix multiplication
-Here is antoher example of parallel Haskell using the Par Monad. In this case it's not a typical divide and conquer solution. We ar going to show you parallel matrix multiplication in Haskell.
+Quicksort's divide and concuer solution is nicely described with a data flow graph so we should really try this out with the Par Monad. Basically we are spawning the recursive calls to quicksort in parallel, but only to a certain depth. 
 
-Our solution uses the built in function `parMap` to map matrix vector multiplaction over a bunch of columns. Before we look at a simple version of `parMap` we are going to take a look at the function `spawn`, which is used by `parMap`.
+The `spawn`function is provided by the Par Monad API and the definition looks a little something like this:
 
 ```haskell
 spawn :: NFData a => Par a -> Par (IVar a)
@@ -64,7 +65,54 @@ spawn p = do
     put i x)
   return i
 ```
-This function takes a Par a, evaluates the result fully in a forked node and puts it in an IVar which is returned. Well how is this used in `parMap` then?
+This function takes a Par a, evaluates the result fully in a forked node and puts it in an IVar which is returned. Basically it's spawning a computation in parallel. This is used in combination with a sequential quicksort function to spin up a web of parallel quicksorting.
+
+```haskell
+module Main where
+
+import Data.List
+import Control.Monad.Par
+import System.Random
+import Criterion.Main
+
+rlist :: StdGen -> Int -> [Int]
+rlist g 0 = [fst $ randomR (0,1000) g]
+rlist g i = x : rlist g' (i-1)
+    where (x,g') = randomR (0,1000) g
+
+-- Sequential Quicksort
+qsortSeq :: [Int] -> [Int]
+qsortSeq []     = []
+qsortSeq (p:xs) = lt ++ [p] ++ gt
+    where
+        lt = qsortSeq (filter (<=p) xs)
+        gt = qsortSeq (filter (>p)  xs)
+
+-- Parallel Quicksort
+qsortPar :: Int -> [Int] -> Par [Int]
+qsortPar 0 xs     = return $ qsortSeq xs
+qsortPar _ []     = return []
+qsortPar k (p:xs) = do
+    ilt <- spawn $ qsortPar (k-1) (filter (<=p) xs)
+    igt <- spawn $ qsortPar (k-1) (filter (>p)  xs)
+    lt <- get ilt
+    gt <- get igt
+    return $ lt ++ [p] ++ gt
+
+main = do
+    let n  = 100000
+    let k  = 4
+    let xs = rlist (mkStdGen 0) n
+    defaultMain [
+        bench "qsortSeq" (nf qsortSeq (rlist (mkStdGen 0) n)),
+        bench "qsortPar" (nf (runPar . qsortPar k) (rlist (mkStdGen 0) n))]
+```
+
+
+#### Matrix multiplication
+Here is antoher example of parallel Haskell using the Par Monad. In this case it's not a typical divide and conquer solution. We ar going to show you parallel matrix multiplication in Haskell.
+
+Our solution uses the built in function `parMap` to map matrix vector multiplaction over a bunch of columns. Remember `spawn`? Not the 90's movie but the function defined above. **:smirking-face:** This function is used by `parMap` to fork new parallel computations.
 
 ````haskell
 parMap :: NFData b => (a -> Par b) -> [a] -> Par [b]
