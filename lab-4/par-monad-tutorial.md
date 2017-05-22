@@ -1,6 +1,6 @@
-[meatballgraph]: ./dataflowmeatballgraph.png "Data Flow Graph"
-[qsort]: ./dfqsort.png "Data Flow Qsort"
-[matrix]: ./dfmatrixprod.png "Data Flow Matrix"
+[meatballgraph]: https://github.com/chewchew/parafunc/blob/master/lab-4/dataflowmeatballgraph.png?raw=true "Data Flow Graph"
+[qsort]: https://github.com/chewchew/parafunc/blob/master/lab-4/dfqsort.png?raw=true "Data Flow Qsort"
+[matrix]: https://github.com/chewchew/parafunc/blob/master/lab-4/dfmatrixprod.png?raw=true "Data Flow Matrix"
 
 ## Using the Par Monad for parallel Haskell programming
 A great way to write parallel Haskell program is to utilize the Par Monad. This library avoids some problems with lazy evaluations in parallel and is very explicit regarding granularity and data dependencies. If a solution to your problem can be described using a data flow graph, look no further.
