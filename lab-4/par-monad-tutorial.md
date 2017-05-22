@@ -46,6 +46,78 @@ A great way to visualize the parallelism, created using the Par Monad, is a data
 
 So this is what the parallelism looks like!
 
-### Show me something real!
-Matrix multiplication...
+### the Par monad in the wild
+
+#### Quicksort
+
+#### Matrix multiplication
+Here is antoher example of parallel Haskell using the Par Monad. In this case it's not a typical divide and conquer solution. We ar going to show you parallel matrix multiplication in Haskell.
+
+Our solution uses the built in function `parMap` to map matrix vector multiplaction over a bunch of columns. Before we look at a simple version of `parMap` we are going to take a look at the function `spawn`, which is used by `parMap`.
+
+```haskell
+spawn :: NFData a => Par a -> Par (IVar a)
+spawn p = do
+  i <- new
+  fork (do
+    x <- p
+    put i x)
+  return i
+```
+This function takes a Par a, evaluates the result fully in a forked node and puts it in an IVar which is returned. Well how is this used in `parMap` then?
+
+````haskell
+parMap :: NFData b => (a -> Par b) -> [a] -> Par [b]
+parMap f ls = do
+  is <- mapM (spawn . return . f) ls
+  mapM get is
+````
+The chaining of `spawn . return . f` is just to get the types to work with `mapM`. We end up with a list of `IVar`'s and we the we simply map `get` on all of them to retrive the final values.
+
+Now to the work of parallelizing matrix mulitplication! 
+
+```haskell
+
+module Main where
+
+import Control.Monad.Par
+import Criterion.Main
+
+type Matrix = [[Int]]
+type Vector = [Int]
+
+identityMatrix3 :: Matrix
+identityMatrix3 = [[1,0,0],[0,1,0],[0,0,1]]
+
+bigMatrix :: Matrix
+bigMatrix = [[1..500] | _ <- [1..100]]
+
+transposeRow :: Vector -> Matrix
+transposeRow v = [[x] | x <- v]
+
+transpose :: Matrix -> Matrix
+transpose (r:[]) = transposeRow r
+transpose (r:m) = [l ++ r | (l,r) <- zip rt (transpose m)]
+    where rt = transposeRow r
+
+vectorVectorProd :: Vector -> Vector -> Int
+vectorVectorProd v1 v2 = sum [x1 * x2 | (x1,x2) <- zip v1 v2]
+
+matrixVectorProd :: Matrix -> Vector -> Par Vector
+matrixVectorProd m v = parMap (\ mv -> vectorVectorProd mv v ) (transpose m)
+
+matrixProd :: Matrix -> Matrix -> Par Matrix
+matrixProd lm rm = parMap (\ lmr -> matrixVectorProdSeq rm lmr) lm
+
+matrixVectorProdSeq :: Matrix -> Vector -> Vector
+matrixVectorProdSeq m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
+
+matrixProdSeq :: Matrix -> Matrix -> Matrix
+matrixProdSeq lm rm = map (\ lmr -> matrixVectorProdSeq rm lmr) lm
+
+main :: IO()
+main = do
+    defaultMain [
+        bench "matrixProd" (nf (runPar . matrixProd bigMatrix) bigMatrix)]
+```
 
