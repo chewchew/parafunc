@@ -35,6 +35,9 @@ matrixVectorProdSeq m v = map (\ mv -> vectorVectorProd mv v ) (transpose m)
 matrixProdSeq :: Matrix -> Matrix -> Matrix
 matrixProdSeq lm rm = map (\ lmr -> matrixVectorProdSeq rm lmr) lm
 
+-- how it works
+-- benchmarks
+-- data flow
 main :: IO()
 main = do
     -- defaultMain [
