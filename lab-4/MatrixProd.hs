@@ -47,7 +47,7 @@ matrixProdSeq lm rm = map (\ lmr -> matrixVectorProd rm lmr) lm
 main :: IO()
 main = do
     defaultMain [
-        bench "matrixProdPar" (nf (matrixProdPar 20 bigMatrix) bigMatrix),
+        bench "matrixProdPar" (nf (matrixProdPar 10 bigMatrix) bigMatrix),
         bench "matrixProdSeq" (nf (matrixProdSeq bigMatrix) bigMatrix)]
     -- defaultMain [
     --     bench "matrixProdPar" (nf (matrixProdPar 10 bigMatrix) bigMatrix)]
