@@ -7,7 +7,7 @@ Here is a small example of consuming meatballs in parallel
 ````haskell
 finishPlate :: [Meatballs] -> TastedGood
 finishPlate mbs = runPar $ do
-  let (leftSplit,rightSplit) = splitAt (length mbs ´div´ 2)
+  let (leftSplit,rightSplit) = splitAt (length mbs ´div´ 2) mbs
   resultA <- new
   resultB <- new
   fork (put resultA (consume leftSplit))
